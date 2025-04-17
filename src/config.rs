@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::collections::HashMap;
 use regex::Regex;
 use crate::model::*;
 
@@ -49,4 +48,44 @@ pub fn expand_env_vars(s: &str) -> Result<String, Box<dyn std::error::Error>> {
         let var = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
         std::env::var(var).unwrap_or_else(|_| "".to_string())
     }).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn test_expand_env_vars_basic() {
+        unsafe { env::set_var("TEST_EXPAND", "hello"); }
+        let input = "Value: $TEST_EXPAND!";
+        let expanded = expand_env_vars(input).unwrap();
+        assert_eq!(expanded, "Value: hello!");
+    }
+
+    #[test]
+    fn test_expand_env_vars_braces() {
+        unsafe { env::set_var("TEST_EXPAND2", "world"); }
+        let input = "Value: ${TEST_EXPAND2}!";
+        let expanded = expand_env_vars(input).unwrap();
+        assert_eq!(expanded, "Value: world!");
+    }
+
+    #[test]
+    fn test_expand_env_vars_missing() {
+        let input = "Value: $NOT_SET!";
+        let expanded = expand_env_vars(input).unwrap();
+        assert_eq!(expanded, "Value: !");
+    }
+
+    #[test]
+    fn test_ensure_config_and_load_config() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        unsafe { env::set_var("XDG_CONFIG_HOME", tmp_dir.path()); }
+        ensure_config().unwrap();
+        let path = get_config_file_path();
+        assert!(path.exists());
+        let cfg = load_config().unwrap();
+        assert!(cfg.mcp_servers.is_empty());
+    }
 }

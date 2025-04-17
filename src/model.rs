@@ -30,3 +30,26 @@ pub struct ClaudeDesktopConfig {
     #[serde(rename = "mcpServers")]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_serialize_deserialize_mcpserversconfig() {
+        let json = r#"{
+            \"mcpServers\": {
+                \"test\": {\"command\": \"echo\", \"args\": [\"hi\"], \"env\": {\"A\": \"B\"}}
+            },
+            \"environments\": {
+                \"env1\": {\"configPath\": \"/tmp/test.json\", \"enable\": [\"test\"], \"preset\": {\"p1\": [\"test\"]}, \"mode\": \"testmode\"}
+            }
+        }"#;
+        let cfg: McpServersConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.mcp_servers.len(), 1);
+        assert_eq!(cfg.environments.len(), 1);
+        let out = serde_json::to_string(&cfg).unwrap();
+        assert!(out.contains("mcpServers"));
+    }
+}

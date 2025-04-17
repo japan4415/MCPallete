@@ -1,5 +1,4 @@
-use ratatui::widgets::{ListState, List, ListItem, Paragraph, Block, Borders};
-use ratatui::style::{Color, Style};
+use ratatui::widgets::ListState;
 use crossterm::{event::{self, Event, KeyCode}, execute, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}};
 use std::collections::HashMap;
 use crate::config::*;
@@ -84,7 +83,7 @@ pub fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut preset_input = String::new();
     let mut active_col = ActiveColumn::Environments;
     loop {
-        terminal.draw(|f| {
+        terminal.draw(|_| {
             // ...existing code (UI描画処理)...
         })?;
         if event::poll(std::time::Duration::from_millis(100))? {
@@ -305,4 +304,57 @@ pub fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{McpServersConfig, McpServerConfig, EnvironmentConfig};
+    use ratatui::widgets::ListState;
+    use std::collections::HashMap;
+
+    fn sample_config() -> Option<McpServersConfig> {
+        let mut mcp_servers = HashMap::new();
+        mcp_servers.insert("a".to_string(), McpServerConfig {
+            command: "echo".to_string(),
+            args: vec!["hi".to_string()],
+            env: HashMap::new(),
+        });
+        let mut environments = HashMap::new();
+        environments.insert("env1".to_string(), EnvironmentConfig {
+            config_path: "/tmp/test.json".to_string(),
+            enable: Some(vec!["a".to_string()]),
+            preset: Some(HashMap::from([
+                ("p1".to_string(), vec!["a".to_string()])
+            ])),
+            mode: Some("testmode".to_string()),
+        });
+        Some(McpServersConfig { mcp_servers, environments })
+    }
+
+    #[test]
+    fn test_update_env_names() {
+        let config = sample_config();
+        let envs = update_env_names(&config);
+        assert_eq!(envs, vec!["env1"]);
+    }
+
+    #[test]
+    fn test_update_mcp_names() {
+        let config = sample_config();
+        let mcps = update_mcp_names(&config);
+        assert_eq!(mcps, vec!["a"]);
+    }
+
+    #[test]
+    fn test_update_preset_names() {
+        let config = sample_config();
+        let env_names = update_env_names(&config);
+        let mut env_state = ListState::default();
+        env_state.select(Some(0));
+        let mut preset_state = ListState::default();
+        let presets = update_preset_names(&config, &env_names, &env_state, &mut preset_state);
+        assert_eq!(presets, vec!["p1"]);
+        assert_eq!(preset_state.selected(), Some(0));
+    }
 }
