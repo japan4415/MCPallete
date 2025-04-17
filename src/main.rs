@@ -10,6 +10,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use regex::Regex;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpServersConfig {
@@ -19,7 +20,7 @@ pub struct McpServersConfig {
     pub environments: HashMap<String, EnvironmentConfig>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct McpServerConfig {
     pub command: String,
     pub args: Vec<String>,
@@ -32,6 +33,13 @@ pub struct EnvironmentConfig {
     pub config_path: String,
     pub enable: Option<Vec<String>>,
     pub preset: Option<HashMap<String, Vec<String>>>,
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClaudeDesktopConfig {
+    #[serde(rename = "mcpServers")]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
 }
 
 fn ensure_config() -> std::io::Result<()> {
@@ -85,6 +93,14 @@ fn read_json_pretty() -> String {
         }
         Err(e) => format!("ファイル読み込みエラー: {}", e),
     }
+}
+
+fn expand_env_vars(s: &str) -> String {
+    let re = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
+    re.replace_all(s, |caps: &regex::Captures| {
+        let var = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
+        std::env::var(var).unwrap_or_else(|_| "".to_string())
+    }).to_string()
 }
 
 fn update_env_names(config: &Option<McpServersConfig>) -> Vec<String> {
@@ -191,10 +207,9 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                 .direction(ratatui::layout::Direction::Horizontal)
                 .margin(1)
                 .constraints([
-                    ratatui::layout::Constraint::Percentage(20), // Environments
-                    ratatui::layout::Constraint::Percentage(20), // McpServers
-                    ratatui::layout::Constraint::Percentage(20), // PresetList+PresetSubmit
-                    ratatui::layout::Constraint::Percentage(40), // JSON
+                    ratatui::layout::Constraint::Percentage(34), // Environments
+                    ratatui::layout::Constraint::Percentage(33), // McpServers
+                    ratatui::layout::Constraint::Percentage(33), // PresetList+PresetSubmit
                 ])
                 .split(area);
             // 左: 環境名リスト
@@ -246,11 +261,6 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
             if let ActiveColumn::PresetSubmit = active_col {
                 f.set_cursor_position((preset_chunks[1].x + preset_input.len() as u16 + 1, preset_chunks[1].y + 1));
             }
-            // 右: JSON
-            let para = Paragraph::new(json_text.as_str())
-                .block(Block::default().title("Config JSON").borders(Borders::ALL))
-                .wrap(Wrap { trim: false });
-            f.render_widget(para, layout[3]);
         })?;
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
@@ -261,6 +271,33 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                         if let (Some(cfg), Some(env_idx)) = (&mut config, env_state.selected()) {
                             if let Some(env_name) = env_names.get(env_idx) {
                                 if let Some(env_cfg) = cfg.environments.get_mut(env_name) {
+                                    // claude_desktopモードならconfigPathのmcpServersも更新
+                                    if let Some(mode) = env_cfg.mode.as_ref() {
+                                        if mode == "claude_desktop" && !env_cfg.config_path.is_empty() {
+                                            let path = &env_cfg.config_path;
+                                            // チェックされているMCPサーバーのみ抽出（値をcloneする）
+                                            let selected_servers: HashMap<String, McpServerConfig> = mcp_names.iter().enumerate()
+                                                .filter_map(|(i, name)| {
+                                                    if mcp_checked.get(i).copied().unwrap_or(false) {
+                                                        cfg.mcp_servers.get(name).map(|v| {
+                                                            let mut v = v.clone();
+                                                            v.env = v.env.iter()
+                                                                .map(|(k, val)| (k.clone(), expand_env_vars(val)))
+                                                                .collect();
+                                                            (name.clone(), v)
+                                                        })
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .collect();
+                                            let desktop_config = ClaudeDesktopConfig { mcp_servers: selected_servers };
+                                            if let Ok(json) = serde_json::to_string_pretty(&desktop_config) {
+                                                let _ = std::fs::write(path, json);
+                                            }
+                                        }
+                                    }
+                                    // enableフィールド・basic_config.jsonの保存
                                     let enabled: Vec<String> = mcp_names.iter().enumerate()
                                         .filter_map(|(i, name)| if mcp_checked.get(i).copied().unwrap_or(false) { Some(name.clone()) } else { None })
                                         .collect();
@@ -303,7 +340,6 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     },
                     KeyCode::Char('r') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
-                        json_text = read_json_pretty();
                         config = load_config();
                         env_names = update_env_names(&config);
                         mcp_names = update_mcp_names(&config);
