@@ -326,6 +326,28 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         };
                     },
+                    KeyCode::Char('d') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                        if let ActiveColumn::PresetList = active_col {
+                            if let (Some(cfg), Some(env_idx), Some(preset_idx)) = (&mut config, env_state.selected(), preset_state.selected()) {
+                                let env_name = env_names.get(env_idx);
+                                let preset_name = preset_names.get(preset_idx);
+                                if let (Some(env_name), Some(preset_name)) = (env_name, preset_name) {
+                                    if let Some(env_cfg) = cfg.environments.get_mut(env_name) {
+                                        if let Some(presets) = env_cfg.preset.as_mut() {
+                                            presets.remove(preset_name);
+                                            if let Ok(json) = serde_json::to_string_pretty(&cfg) {
+                                                let path = get_config_file_path();
+                                                if std::fs::write(&path, json).is_ok() {
+                                                    json_text = read_json_pretty();
+                                                    preset_names = update_preset_names(&config, &env_names, &env_state, &mut preset_state);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     KeyCode::Left => {
                         active_col = match active_col {
                             ActiveColumn::McpServers => ActiveColumn::Environments,
