@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use ratatui::widgets::{ListState, List, ListItem, Paragraph, Wrap, Block, Borders};
+use ratatui::widgets::{ListState, List, ListItem, Paragraph, Block, Borders};
 use ratatui::style::{Color, Style};
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -82,19 +82,6 @@ fn load_config() -> Option<McpServersConfig> {
     }
 }
 
-fn read_json_pretty() -> String {
-    let path = get_config_file_path();
-    match std::fs::read_to_string(&path) {
-        Ok(content) => {
-            match serde_json::from_str::<serde_json::Value>(&content) {
-                Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_else(|_| content.clone()),
-                Err(_) => content,
-            }
-        }
-        Err(e) => format!("ファイル読み込みエラー: {}", e),
-    }
-}
-
 fn expand_env_vars(s: &str) -> String {
     let re = Regex::new(r"\$([A-Za-z_][A-Za-z0-9_]*)|\$\{([A-Za-z_][A-Za-z0-9_]*)\}").unwrap();
     re.replace_all(s, |caps: &regex::Captures| {
@@ -155,7 +142,6 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(stdout, EnterAlternateScreen)?;
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = ratatui::Terminal::new(backend)?;
-    let mut json_text = read_json_pretty();
     let mut config = load_config();
     // 初回・Ctrl+R時のみEnvironments, MCP Servers, Presets, mcp_checkedを更新
     let mut env_names = update_env_names(&config);
@@ -304,9 +290,7 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                                     env_cfg.enable = Some(enabled);
                                     if let Ok(json) = serde_json::to_string_pretty(&cfg) {
                                         let path = get_config_file_path();
-                                        if std::fs::write(&path, json).is_ok() {
-                                            json_text = read_json_pretty();
-                                        }
+                                        if std::fs::write(&path, json).is_ok() {}
                                     }
                                 }
                             }
@@ -328,7 +312,6 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                                             if let Ok(json) = serde_json::to_string_pretty(&cfg) {
                                                 let path = get_config_file_path();
                                                 if std::fs::write(&path, json).is_ok() {
-                                                    json_text = read_json_pretty();
                                                     preset_names = update_preset_names(&config, &env_names, &env_state, &mut preset_state);
                                                     preset_input.clear();
                                                 }
@@ -374,7 +357,6 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                                             if let Ok(json) = serde_json::to_string_pretty(&cfg) {
                                                 let path = get_config_file_path();
                                                 if std::fs::write(&path, json).is_ok() {
-                                                    json_text = read_json_pretty();
                                                     preset_names = update_preset_names(&config, &env_names, &env_state, &mut preset_state);
                                                 }
                                             }
