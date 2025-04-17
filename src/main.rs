@@ -244,7 +244,7 @@ fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                 .block(input_block);
             f.render_widget(input_para, preset_chunks[1]);
             if let ActiveColumn::PresetSubmit = active_col {
-                f.set_cursor(preset_chunks[1].x + preset_input.len() as u16 + 1, preset_chunks[1].y + 1);
+                f.set_cursor_position((preset_chunks[1].x + preset_input.len() as u16 + 1, preset_chunks[1].y + 1));
             }
             // 右: JSON
             let para = Paragraph::new(json_text.as_str())
