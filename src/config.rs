@@ -19,7 +19,7 @@ pub fn ensure_config() -> Result<(), Box<dyn std::error::Error>> {
     if !config_file.exists() {
         use std::io::Write;
         let mut file = fs::File::create(config_file)?;
-        file.write_all(b"{\n  \"mcpServers\": {}\n}\n")?;
+        file.write_all(b"{\n  \"mcpServers\": {},\n  \"environments\": {}\n}\n")?;
     }
     Ok(())
 }

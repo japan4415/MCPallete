@@ -39,11 +39,11 @@ mod tests {
     #[test]
     fn test_serialize_deserialize_mcpserversconfig() {
         let json = r#"{
-            \"mcpServers\": {
-                \"test\": {\"command\": \"echo\", \"args\": [\"hi\"], \"env\": {\"A\": \"B\"}}
+            "mcpServers": {
+                "test": {"command": "echo", "args": ["hi"], "env": {"A": "B"}}
             },
-            \"environments\": {
-                \"env1\": {\"configPath\": \"/tmp/test.json\", \"enable\": [\"test\"], \"preset\": {\"p1\": [\"test\"]}, \"mode\": \"testmode\"}
+            "environments": {
+                "env1": {"configPath": "/tmp/test.json", "enable": ["test"], "preset": {"p1": ["test"]}, "mode": "testmode"}
             }
         }"#;
         let cfg: McpServersConfig = serde_json::from_str(json).unwrap();

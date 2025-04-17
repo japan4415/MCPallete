@@ -3,7 +3,6 @@ mod config;
 mod tui;
 
 use config::*;
-use model::*;
 use tui::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
