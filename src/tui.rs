@@ -83,8 +83,86 @@ pub fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut preset_input = String::new();
     let mut active_col = ActiveColumn::Environments;
     loop {
-        terminal.draw(|_| {
-            // ...existing code (UI描画処理)...
+        terminal.draw(|f| {
+            use ratatui::layout::{Layout, Constraint, Direction};
+            use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+            use ratatui::style::{Style, Color};
+
+            // 上部を横分割: 環境/サーバ/プリセット
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(40),
+                    Constraint::Percentage(30),
+                ])
+                .split(f.area());
+
+            // Presetカラムをさらに縦分割: 上(プリセットリスト), 下(Preset Name)
+            let preset_column = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(3),
+                    Constraint::Length(3),
+                ])
+                .split(chunks[2]);
+
+            // highlight_styleを選択中カラムだけに適用
+            let env_highlight = if matches!(active_col, ActiveColumn::Environments) {
+                Style::default().bg(Color::Blue)
+            } else { Style::default() };
+            let mcp_highlight = if matches!(active_col, ActiveColumn::McpServers) {
+                Style::default().bg(Color::Blue)
+            } else { Style::default() };
+            let preset_highlight = if matches!(active_col, ActiveColumn::PresetList) {
+                Style::default().bg(Color::Blue)
+            } else { Style::default() };
+            let preset_input_highlight = if matches!(active_col, ActiveColumn::PresetSubmit) {
+                Style::default().bg(Color::Blue)
+            } else { Style::default() };
+
+            // 枠線の色も選択中カラムだけ青、それ以外は白
+            let env_border = if matches!(active_col, ActiveColumn::Environments) {
+                Style::default().fg(Color::Blue)
+            } else { Style::default().fg(Color::White) };
+            let mcp_border = if matches!(active_col, ActiveColumn::McpServers) {
+                Style::default().fg(Color::Blue)
+            } else { Style::default().fg(Color::White) };
+            let preset_border = if matches!(active_col, ActiveColumn::PresetList) {
+                Style::default().fg(Color::Blue)
+            } else { Style::default().fg(Color::White) };
+            let preset_input_border = if matches!(active_col, ActiveColumn::PresetSubmit) {
+                Style::default().fg(Color::Blue)
+            } else { Style::default().fg(Color::White) };
+
+            // Environments List
+            let env_items: Vec<ListItem> = env_names.iter().map(|e| ListItem::new(e.clone())).collect();
+            let env_list = List::new(env_items)
+                .block(Block::default().borders(Borders::ALL).title("Environments").border_style(env_border))
+                .highlight_style(env_highlight);
+            f.render_stateful_widget(env_list, chunks[0], &mut env_state);
+
+            // MCP Servers List
+            let mcp_items: Vec<ListItem> = mcp_names.iter().enumerate().map(|(i, m)| {
+                let checked = if mcp_checked.get(i).copied().unwrap_or(false) { "[x] " } else { "[ ] " };
+                ListItem::new(format!("{}{}", checked, m))
+            }).collect();
+            let mcp_list = List::new(mcp_items)
+                .block(Block::default().borders(Borders::ALL).title("MCP Servers").border_style(mcp_border))
+                .highlight_style(mcp_highlight);
+            f.render_stateful_widget(mcp_list, chunks[1], &mut mcp_state);
+
+            // Preset List（プリセットカラムの上部）
+            let preset_items: Vec<ListItem> = preset_names.iter().map(|p| ListItem::new(p.clone())).collect();
+            let preset_list = List::new(preset_items)
+                .block(Block::default().borders(Borders::ALL).title("Presets").border_style(preset_border))
+                .highlight_style(preset_highlight);
+            f.render_stateful_widget(preset_list, preset_column[0], &mut preset_state);
+
+            // Preset Input（プリセットカラムの下部）
+            let preset_input_paragraph = Paragraph::new(preset_input.as_str())
+                .block(Block::default().borders(Borders::ALL).title("Preset Name (Enter to Save)").border_style(preset_input_border));
+            f.render_widget(preset_input_paragraph, preset_column[1]);
         })?;
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
@@ -271,20 +349,32 @@ pub fn tui_main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             },
                             ActiveColumn::PresetList => {
-                                if let (Some(cfg), Some(env_idx), Some(preset_idx)) = (&config, env_state.selected(), preset_state.selected()) {
-                                    let env_name = env_names.get(env_idx);
-                                    let preset_name = preset_names.get(preset_idx);
-                                    if let (Some(env_name), Some(preset_name)) = (env_name, preset_name) {
-                                        if let Some(env_cfg) = cfg.environments.get(env_name) {
-                                            if let Some(presets) = &env_cfg.preset {
-                                                let enabled_list = presets.get(preset_name);
-                                                mcp_checked = mcp_names.iter().map(|mcp| {
-                                                    enabled_list.map_or(false, |list| list.contains(mcp))
-                                                }).collect();
+                                // プリセットリストでspaceを押したとき、選択中プリセットの有効MCPサーバーリストをmcp_checkedに反映
+                                mcp_checked = {
+                                    if let (Some(cfg), Some(env_idx), Some(preset_idx)) = (&config, env_state.selected(), preset_state.selected()) {
+                                        let env_name = env_names.get(env_idx);
+                                        let preset_name = preset_names.get(preset_idx);
+                                        if let (Some(env_name), Some(preset_name)) = (env_name, preset_name) {
+                                            if let Some(env_cfg) = cfg.environments.get(env_name) {
+                                                if let Some(presets) = &env_cfg.preset {
+                                                    if let Some(enabled_list) = presets.get(preset_name) {
+                                                        mcp_names.iter().map(|mcp| enabled_list.contains(mcp)).collect()
+                                                    } else {
+                                                        vec![false; mcp_names.len()]
+                                                    }
+                                                } else {
+                                                    vec![false; mcp_names.len()]
+                                                }
+                                            } else {
+                                                vec![false; mcp_names.len()]
                                             }
+                                        } else {
+                                            vec![false; mcp_names.len()]
                                         }
+                                    } else {
+                                        vec![false; mcp_names.len()]
                                     }
-                                }
+                                };
                             },
                             _ => {}
                         }
