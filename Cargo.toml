@@ -2,6 +2,7 @@
 name = "MCPallete"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/japan4415/MCPallete"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -12,3 +13,8 @@ regex = "1.11.1"
 
 [dev-dependencies]
 tempfile = "3"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
