@@ -1,6 +1,6 @@
 [package]
 name = "MCPallete"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 repository = "https://github.com/japan4415/MCPallete"
 
@@ -18,4 +18,6 @@ tempfile = "3"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[dist]
 allow-dirty = ["ci"]
